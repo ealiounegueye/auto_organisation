@@ -7,9 +7,25 @@ namespace OutlookOrganizer.Models;
 public sealed class CategoryStat : INotifyPropertyChanged
 {
     private int _count;
+    private string _source = string.Empty;
 
     public required string Name { get; init; }
     public required Brush Color { get; init; }
+
+    public string Source
+    {
+        get => _source;
+        set
+        {
+            if (_source == value)
+            {
+                return;
+            }
+
+            _source = value;
+            OnPropertyChanged();
+        }
+    }
 
     public int Count
     {

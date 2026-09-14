@@ -17,43 +17,27 @@ public sealed class MainViewModel : ViewModelBase
     private bool _isSignedIn;
     private bool _hasAnalysis;
     private bool _isSimulationMode;
-    private string _statusMessage = "Connectez-vous avec votre compte Microsoft 365 pour commencer.";
+    private string _statusMessage = "Cliquez sur Organiser ma boîte. Les thématiques seront créées à partir de vos messages.";
     private string _account = "Non connecté";
     private string _displayName = string.Empty;
     private int _analyzedCount;
     private int _classifiableCount;
+    private int _unclassifiedCount;
 
     public MainViewModel(AppOptions options)
     {
         _options = options;
         _isSimulationMode = options.Organizer.SimulationModeDefault;
 
-        foreach (var category in MailCategory.All)
-        {
-            var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(category.ColorKey)!;
-            if (brush.CanFreeze)
-            {
-                brush.Freeze();
-            }
-
-            Categories.Add(new CategoryStat
-            {
-                Name = category.Name,
-                Color = brush
-            });
-        }
-
         SignInCommand = new AsyncRelayCommand(SignInAsync, () => !IsBusy);
         SignOutCommand = new AsyncRelayCommand(SignOutAsync, () => !IsBusy && IsSignedIn);
-        AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsBusy && IsSignedIn);
-        OrganizeCommand = new AsyncRelayCommand(OrganizeAsync, () => !IsBusy && IsSignedIn && HasAnalysis);
+        OrganizeCommand = new AsyncRelayCommand(OrganizeMailboxAsync, () => !IsBusy);
     }
 
     public ObservableCollection<CategoryStat> Categories { get; } = [];
 
     public ICommand SignInCommand { get; }
     public ICommand SignOutCommand { get; }
-    public ICommand AnalyzeCommand { get; }
     public ICommand OrganizeCommand { get; }
 
     public bool IsBusy
@@ -90,10 +74,13 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _hasAnalysis, value))
             {
-                RefreshCommands();
+                OnPropertyChanged(nameof(HasNoThemesYet));
+                OnPropertyChanged(nameof(SummaryText));
             }
         }
     }
+
+    public bool HasNoThemesYet => !HasAnalysis;
 
     public bool IsSimulationMode
     {
@@ -103,9 +90,14 @@ public sealed class MainViewModel : ViewModelBase
             if (SetProperty(ref _isSimulationMode, value))
             {
                 OnPropertyChanged(nameof(SimulationBannerText));
+                OnPropertyChanged(nameof(OrganizeButtonText));
             }
         }
     }
+
+    public string OrganizeButtonText => IsSimulationMode
+        ? "Aperçu de ma boîte"
+        : "Organiser ma boîte";
 
     public string StatusMessage
     {
@@ -149,19 +141,31 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public int UnclassifiedCount
+    {
+        get => _unclassifiedCount;
+        private set
+        {
+            if (SetProperty(ref _unclassifiedCount, value))
+            {
+                OnPropertyChanged(nameof(SummaryText));
+            }
+        }
+    }
+
     public string SummaryText => HasAnalysis
-        ? $"{AnalyzedCount:N0} messages analysés — {ClassifiableCount:N0} peuvent être classés"
-        : "Aucune analyse pour le moment";
+        ? $"{AnalyzedCount:N0} messages lus — {Categories.Count} thématique(s) créée(s) — {ClassifiableCount:N0} classés, {UnclassifiedCount:N0} laissés tels quels"
+        : "Aucune thématique pour l’instant : elles naîtront de vos e-mails, pas d’une liste imposée.";
 
     public string SimulationBannerText => IsSimulationMode
-        ? "Mode simulation activé — aucun message ne sera modifié."
-        : "Mode réel — les catégories Outlook seront écrites (disponible à l'étape 2).";
+        ? "Aperçu seulement — l’application lit votre boîte et propose des thématiques, sans rien modifier."
+        : "Mode réel — un clic crée les thématiques dans Outlook et classe les messages correspondants.";
 
     public async Task InitializeAsync()
     {
         if (!_options.HasValidClientId)
         {
-            StatusMessage = "Configurez d'abord le Client ID dans appsettings.local.json (voir le guide Entra ID).";
+            StatusMessage = "L’administrateur doit d’abord enregistrer l’application dans Entra ID (docs/ENTRA-ID.md).";
             return;
         }
 
@@ -176,7 +180,7 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             await LoadProfileAsync();
-            StatusMessage = "Session Microsoft 365 restaurée. Vous pouvez analyser votre boîte.";
+            StatusMessage = "Session Microsoft 365 restaurée. Cliquez sur Organiser ma boîte.";
         }
         catch (Exception ex)
         {
@@ -188,7 +192,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         if (!_options.HasValidClientId)
         {
-            StatusMessage = "Le Client ID Entra ID n'est pas renseigné. Ouvrez docs/ENTRA-ID.md puis appsettings.local.json.";
+            StatusMessage = "Le Client ID Entra ID n'est pas renseigné. Voir docs/ENTRA-ID.md.";
             return;
         }
 
@@ -201,7 +205,7 @@ public sealed class MainViewModel : ViewModelBase
             await _auth!.InitializeCacheAsync();
             await _auth.SignInAsync();
             await LoadProfileAsync();
-            StatusMessage = "Connexion réussie. Cliquez sur Analyser ma boîte — rien ne sera modifié.";
+            StatusMessage = "Connexion réussie. Cliquez sur Organiser ma boîte.";
         }
         catch (MsalClientException ex) when (ex.ErrorCode == "authentication_canceled")
         {
@@ -233,8 +237,9 @@ public sealed class MainViewModel : ViewModelBase
             DisplayName = string.Empty;
             AnalyzedCount = 0;
             ClassifiableCount = 0;
-            ResetCategoryCounts();
-            StatusMessage = "Déconnecté. Vos identifiants n'ont jamais été stockés par l'application.";
+            UnclassifiedCount = 0;
+            Categories.Clear();
+            StatusMessage = "Déconnecté. Cliquez sur Organiser ma boîte pour recommencer.";
         }
         catch (Exception ex)
         {
@@ -246,28 +251,56 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    private async Task AnalyzeAsync()
+    private async Task OrganizeMailboxAsync()
     {
-        if (_mail is null)
+        if (!_options.HasValidClientId)
         {
-            StatusMessage = "Connectez-vous avant d'analyser la boîte.";
+            StatusMessage = "Le Client ID Entra ID n'est pas renseigné. Voir docs/ENTRA-ID.md.";
             return;
         }
 
         IsBusy = true;
         HasAnalysis = false;
-        StatusMessage = "Lecture de la boîte (simulation, lecture seule)…";
+        Categories.Clear();
 
         try
         {
-            var progress = new Progress<string>(message => StatusMessage = message);
-            var analysis = await _mail.AnalyzeInboxAsync(progress);
+            EnsureServices();
+            await _auth!.InitializeCacheAsync();
 
-            AnalyzedCount = analysis.AnalyzedCount;
-            ClassifiableCount = analysis.ClassifiableCount;
-            ApplyCounts(analysis.CategoryCounts);
-            HasAnalysis = true;
-            StatusMessage = $"{analysis.AnalyzedCount:N0} messages analysés — {analysis.ClassifiableCount:N0} peuvent être classés. Aucun message n'a été modifié.";
+            if (!IsSignedIn)
+            {
+                StatusMessage = "Ouverture de la connexion Microsoft 365…";
+                await _auth.SignInAsync();
+                await LoadProfileAsync();
+            }
+
+            StatusMessage = "Lecture de votre boîte…";
+            var progress = new Progress<string>(message => StatusMessage = message);
+            var analysis = await _mail!.AnalyzeInboxAsync(progress);
+            ShowAnalysis(analysis);
+
+            if (IsSimulationMode)
+            {
+                StatusMessage = analysis.Themes.Count == 0
+                    ? "Aperçu terminé : pas assez de messages semblables pour créer une thématique."
+                    : $"Aperçu : {analysis.Themes.Count} thématique(s) seraient créées, {analysis.ClassifiableCount:N0} messages classés. Rien n’a été modifié.";
+                return;
+            }
+
+            if (analysis.Themes.Count == 0)
+            {
+                StatusMessage = "Pas assez de messages semblables pour créer une thématique. Rien n’a été modifié.";
+                return;
+            }
+
+            StatusMessage = "Création des thématiques dans Outlook…";
+            var applied = await _mail.ApplyThemesAsync(analysis, progress);
+            StatusMessage = $"{analysis.Themes.Count} thématique(s) créées dans Outlook — {applied:N0} messages classés. Ouvrez Outlook pour les voir.";
+        }
+        catch (MsalClientException ex) when (ex.ErrorCode == "authentication_canceled")
+        {
+            StatusMessage = "Connexion annulée.";
         }
         catch (Exception ex)
         {
@@ -279,16 +312,44 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    private Task OrganizeAsync()
+    private void ShowAnalysis(MailboxAnalysis analysis)
     {
-        if (IsSimulationMode)
+        AnalyzedCount = analysis.AnalyzedCount;
+        ClassifiableCount = analysis.ClassifiableCount;
+        UnclassifiedCount = analysis.UnclassifiedCount;
+        Categories.Clear();
+
+        foreach (var theme in analysis.Themes)
         {
-            StatusMessage = $"Simulation : {ClassifiableCount:N0} messages seraient classés. Aucun message n'a été modifié.";
-            return Task.CompletedTask;
+            var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(theme.ColorHex)!;
+            if (brush.CanFreeze)
+            {
+                brush.Freeze();
+            }
+
+            Categories.Add(new CategoryStat
+            {
+                Name = theme.Name,
+                Color = brush,
+                Count = theme.Count,
+                Source = theme.Source
+            });
         }
 
-        StatusMessage = "Le classement réel (écriture des catégories Outlook) arrive à l'étape 2. Laissez le mode simulation activé pour l'instant.";
-        return Task.CompletedTask;
+        if (analysis.UnclassifiedCount > 0)
+        {
+            var other = new SolidColorBrush(Color.FromRgb(0x60, 0x5E, 0x5C));
+            other.Freeze();
+            Categories.Add(new CategoryStat
+            {
+                Name = "Non classés",
+                Color = other,
+                Count = analysis.UnclassifiedCount,
+                Source = "pas assez de points communs"
+            });
+        }
+
+        HasAnalysis = true;
     }
 
     private async Task LoadProfileAsync()
@@ -305,27 +366,10 @@ public sealed class MainViewModel : ViewModelBase
         _mail ??= new GraphMailService(_auth, _options);
     }
 
-    private void ApplyCounts(IReadOnlyDictionary<string, int> counts)
-    {
-        foreach (var category in Categories)
-        {
-            category.Count = counts.TryGetValue(category.Name, out var value) ? value : 0;
-        }
-    }
-
-    private void ResetCategoryCounts()
-    {
-        foreach (var category in Categories)
-        {
-            category.Count = 0;
-        }
-    }
-
     private void RefreshCommands()
     {
         (SignInCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (SignOutCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-        (AnalyzeCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (OrganizeCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
     }
 

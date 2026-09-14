@@ -1,94 +1,48 @@
-# Outlook Organizer — Étape 1
+# Outlook Organizer
 
-Petit logiciel Windows pour organiser une boîte Microsoft 365 **sans PowerShell, sans CMD**.
+Logiciel Windows pour organiser une boîte Microsoft 365 **en un clic**.
 
-Le collaborateur fera plus tard :
+Le collaborateur :
 
-**double-clic → Se connecter → Analyser ma boîte → Organiser**
+1. Double-clique sur l’application
+2. Se connecte avec son compte Microsoft 365 (la première fois)
+3. Clique sur **Organiser ma boîte**
 
-Cette étape 1 livre le projet WPF prêt à ouvrir dans Visual Studio, avec :
+L’application **lit ses messages** et **crée des thématiques à partir de ce qu’elle trouve** : domaines d’expéditeurs, boîtes internes du type `rh@` / `facturation@`, mots qui reviennent dans les objets. Il n’y a pas de liste imposée Finance / RH / IT.
 
-- authentification Microsoft 365 (MSAL, permissions déléguées)
-- interface graphique
-- **mode simulation** : l’analyse lit la boîte, elle n’écrit rien
+Les catégories apparaissent ensuite dans Outlook.
 
-L’étape 2 ajoutera le moteur de classement (expéditeur, objet, domaine, mots-clés, pièces jointes).  
-L’étape 3 produira un seul `OutlookOrganizer.exe` distribuable.
+## Ce que fait un clic
 
-## Ce que voit l’utilisateur
+- Connexion Microsoft 365 si besoin (MFA compris). Le mot de passe n’est jamais stocké.
+- Lecture des messages (jusqu’à 2000 par défaut).
+- Découverte des thématiques **propres à cette boîte**.
+- En mode réel : création des catégories Outlook et classement des messages.
+- Case **Aperçu seulement** : montre les thématiques **sans rien modifier**.
 
-- Se connecter / Déconnexion
-- Mode simulation (activé par défaut)
-- Analyser ma boîte (lecture seule via Microsoft Graph)
-- Compteurs par catégorie (Finance, RH, IT, Achats, Projets, Newsletters, Autres)
-- Organiser — en étape 1, confirme la simulation et **ne modifie aucun message**
+Les messages déjà catégorisés, ou trop isolés, sont laissés tels quels.
 
-Le mot de passe n’est **jamais** demandé par l’application ni stocké. Microsoft 365 gère la connexion (et le MFA s’il est activé).
+## Lancer le projet (PC de test / admin)
 
-## Prérequis
+1. Visual Studio 2022 avec la charge **Développement .NET Desktop**
+2. Enregistrement Entra ID **une seule fois** : [docs/ENTRA-ID.md](docs/ENTRA-ID.md)
+3. Copier `OutlookOrganizer/appsettings.local.json.example` vers `appsettings.local.json` et coller Client ID + Tenant ID
+4. Ouvrir `OutlookOrganizer.sln` → **F5**
 
-Sur le PC de développement (Windows) :
+Pour un premier test, cochez **Aperçu seulement**, cliquez sur **Aperçu de ma boîte**, vérifiez les thématiques, puis décochez et cliquez sur **Organiser ma boîte**.
 
-1. [Visual Studio 2022](https://visualstudio.microsoft.com/) avec la charge **Développement .NET Desktop**
-2. [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (inclus avec VS si la charge est cochée)
-3. Une application enregistrée dans **Microsoft Entra ID** — voir [docs/ENTRA-ID.md](docs/ENTRA-ID.md)
+## Collaborateurs
 
-Le projet est du WPF Windows : il se compile sur un PC Windows, pas sur Mac.
+Ils n’ont pas à ouvrir Visual Studio ni PowerShell. L’administrateur configure Entra + le Client ID, compile, et distribue `OutlookOrganizer.exe` (étape packaging).
 
-## Démarrage rapide
-
-1. Enregistrez l’application dans Entra ID et copiez le **Client ID**.
-2. Copiez `OutlookOrganizer/appsettings.local.json.example` vers `OutlookOrganizer/appsettings.local.json`.
-3. Remplacez les GUID :
-
-```json
-{
-  "AzureAd": {
-    "ClientId": "votre-client-id",
-    "TenantId": "votre-tenant-id"
-  }
-}
-```
-
-`TenantId` : l’identifiant du locataire Entra (recommandé en entreprise).  
-Vous pouvez laisser `"organizations"` le temps des tests.
-
-4. Ouvrez `OutlookOrganizer.sln` dans Visual Studio.
-5. F5 pour lancer.
-
-Au premier clic sur **Se connecter**, Microsoft affiche la fenêtre de connexion habituelle.
+Jusque-là, ne donnez pas le code source : donnez uniquement l’exécutable une fois généré.
 
 ## Permissions Graph (déléguées)
 
-L’application agit **au nom de l’utilisateur connecté**, pas sur toutes les boîtes de l’entreprise.
+| Permission | Usage |
+|---|---|
+| `User.Read` | Afficher le compte |
+| `Mail.ReadWrite` | Lire les messages et poser les catégories |
+| `MailboxSettings.ReadWrite` | Créer les thématiques Outlook |
 
-| Permission                 | Usage                                      |
-|----------------------------|--------------------------------------------|
-| `User.Read`                | Afficher le compte connecté                |
-| `Mail.ReadWrite`           | Lire les messages ; écrire les catégories (étape 2) |
-| `MailboxSettings.ReadWrite`| Créer les catégories Outlook (étape 2)     |
-
-En étape 1, seul la **lecture** est réellement utilisée. Les droits d’écriture sont déjà demandés pour ne pas changer le consentement plus tard.
-
-L’administrateur peut devoir **accorder le consentement admin**.
-
-## Structure
-
-```
-OutlookOrganizer.sln
-OutlookOrganizer/
-  App.xaml
-  MainWindow.xaml          Interface
-  appsettings.json         Config par défaut
-  Configuration/           Client ID, limites d'analyse
-  Services/                MSAL + Microsoft Graph
-  ViewModels/              Boutons et états de l'écran
-  Models/                  Catégories et résultat d'analyse
-docs/ENTRA-ID.md           Enregistrement Entra, étape par étape
-```
-
-## Distribution
-
-Pas encore. L’étape 3 produira un `.exe` unique (Teams, SharePoint, Intune, clé USB).
-
-Pour l’instant, ne donnez **pas** ce projet aux collaborateurs.
+L’application agit **au nom de la personne connectée**, pas sur toutes les boîtes.

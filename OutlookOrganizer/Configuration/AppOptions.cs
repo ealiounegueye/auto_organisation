@@ -11,6 +11,8 @@ public sealed class OrganizerOptions
 {
     public int MaxMessagesToAnalyze { get; set; } = 2000;
     public bool SimulationModeDefault { get; set; } = true;
+    public int MinEmailsPerTheme { get; set; } = 6;
+    public int MaxThemes { get; set; } = 12;
 }
 
 public sealed class AppOptions

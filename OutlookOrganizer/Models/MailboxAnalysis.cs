@@ -6,6 +6,6 @@ public sealed class MailboxAnalysis
     public string? Account { get; init; }
     public int AnalyzedCount { get; init; }
     public int ClassifiableCount { get; init; }
-    public IReadOnlyDictionary<string, int> CategoryCounts { get; init; } =
-        new Dictionary<string, int>();
+    public int UnclassifiedCount { get; init; }
+    public IReadOnlyList<DiscoveredTheme> Themes { get; init; } = [];
 }
