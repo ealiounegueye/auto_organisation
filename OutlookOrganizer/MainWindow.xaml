@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Outlook Organizer"
-        Height="760"
-        Width="500"
-        MinHeight="680"
-        MinWidth="460"
+        Height="640"
+        Width="460"
+        MinHeight="520"
+        MinWidth="420"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource AppBackground}"
         FontFamily="Segoe UI"
@@ -22,79 +22,47 @@
                                VerticalAlignment="Center" />
                 </StackPanel>
 
-                <TextBlock Text="Un clic lit votre boîte et crée des thématiques à partir de vos messages."
-                           TextAlignment="Center" Foreground="{StaticResource TextSecondary}"
-                           FontSize="13" Margin="0,0,0,18" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Headline}" FontSize="16" FontWeight="SemiBold"
+                           TextAlignment="Center" Foreground="{StaticResource TextPrimary}"
+                           Margin="0,8,0,6" TextWrapping="Wrap" />
 
-                <Border Background="{StaticResource SimulationBrush}" CornerRadius="6" Padding="12,10" Margin="0,0,0,18">
-                    <StackPanel>
-                        <CheckBox Content="Aperçu seulement (ne rien modifier)"
-                                  IsChecked="{Binding IsSimulationMode, Mode=TwoWay}"
-                                  FontWeight="SemiBold"
-                                  Foreground="{StaticResource SimulationText}" />
-                        <TextBlock Text="{Binding SimulationBannerText}"
-                                   Foreground="{StaticResource SimulationText}"
-                                   FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
+                <TextBlock Text="{Binding Account}" FontSize="13" TextAlignment="Center"
+                           Foreground="{StaticResource TextSecondary}" Margin="0,0,0,16" TextWrapping="Wrap" />
 
-                <TextBlock Text="Votre compte" FontSize="12" Foreground="{StaticResource TextSecondary}" />
-                <TextBlock Text="{Binding Account}" FontSize="15" FontWeight="SemiBold"
-                           Foreground="{StaticResource TextPrimary}" Margin="0,2,0,12" TextWrapping="Wrap" />
+                <ProgressBar Height="6" IsIndeterminate="True" Margin="0,0,0,16"
+                             Visibility="{Binding IsBusy, Converter={StaticResource VisibleIfTrue}}" />
 
-                <Button Content="{Binding OrganizeButtonText}" Style="{StaticResource PrimaryButton}"
-                        Command="{Binding OrganizeCommand}" Margin="0,0,0,10" />
-
-                <Grid Margin="0,0,0,16">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="12" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="Se connecter" Style="{StaticResource SecondaryButton}"
-                            Command="{Binding SignInCommand}"
-                            Visibility="{Binding IsSignedOut, Converter={StaticResource VisibleIfTrue}}" />
-                    <Button Grid.Column="0" Content="Déconnexion" Style="{StaticResource SecondaryButton}"
-                            Command="{Binding SignOutCommand}"
-                            Visibility="{Binding IsSignedIn, Converter={StaticResource VisibleIfTrue}}" />
-                </Grid>
+                <TextBlock Text="{Binding StatusMessage}" FontSize="13"
+                           Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,16" />
 
                 <TextBlock Text="{Binding SummaryText}" FontSize="13" FontWeight="SemiBold"
-                           Foreground="{StaticResource AccentBrush}" Margin="0,0,0,14" TextWrapping="Wrap" />
+                           Foreground="{StaticResource AccentBrush}" Margin="0,0,0,14"
+                           Visibility="{Binding HasAnalysis, Converter={StaticResource VisibleIfTrue}}"
+                           TextWrapping="Wrap" />
 
                 <ItemsControl ItemsSource="{Binding Categories}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,0,0,12">
+                            <Grid Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <Ellipse Grid.Column="0" Grid.Row="0" Width="10" Height="10" Fill="{Binding Color}"
+                                <Ellipse Grid.Column="0" Width="10" Height="10" Fill="{Binding Color}"
                                          VerticalAlignment="Center" Margin="0,0,10,0" />
-                                <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Name}" FontSize="14"
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="14"
                                            Foreground="{StaticResource TextPrimary}" />
-                                <TextBlock Grid.Column="2" Grid.Row="0" Text="{Binding CountText}" FontSize="14"
+                                <TextBlock Grid.Column="2" Text="{Binding CountText}" FontSize="14"
                                            FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" />
-                                <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Source}" FontSize="11"
-                                           Foreground="{StaticResource TextSecondary}" Margin="0,2,0,0" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,8"
-                            Visibility="{Binding IsBusy, Converter={StaticResource VisibleIfTrue}}">
-                    <ProgressBar IsIndeterminate="True" Height="4" Width="160" />
-                </StackPanel>
-
-                <TextBlock Text="{Binding StatusMessage}" FontSize="12"
-                           Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
+                <Button Content="Fermer" Style="{StaticResource PrimaryButton}"
+                        Command="{Binding CloseCommand}" Margin="0,16,0,0"
+                        IsEnabled="{Binding CanClose}" />
             </StackPanel>
         </Border>
     </ScrollViewer>

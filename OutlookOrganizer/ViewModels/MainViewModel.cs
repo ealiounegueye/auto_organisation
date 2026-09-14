@@ -14,12 +14,12 @@ public sealed class MainViewModel : ViewModelBase
     private GraphAuthService? _auth;
     private GraphMailService? _mail;
     private bool _isBusy;
+    private bool _isDone;
     private bool _isSignedIn;
     private bool _hasAnalysis;
-    private bool _isSimulationMode;
-    private string _statusMessage = "Cliquez sur Organiser ma boîte. Les thématiques seront créées à partir de vos messages.";
+    private string _headline = "Organisation de votre boîte";
+    private string _statusMessage = "Connexion à Microsoft 365…";
     private string _account = "Non connecté";
-    private string _displayName = string.Empty;
     private int _analyzedCount;
     private int _classifiableCount;
     private int _unclassifiedCount;
@@ -27,18 +27,14 @@ public sealed class MainViewModel : ViewModelBase
     public MainViewModel(AppOptions options)
     {
         _options = options;
-        _isSimulationMode = options.Organizer.SimulationModeDefault;
-
-        SignInCommand = new AsyncRelayCommand(SignInAsync, () => !IsBusy);
-        SignOutCommand = new AsyncRelayCommand(SignOutAsync, () => !IsBusy && IsSignedIn);
-        OrganizeCommand = new AsyncRelayCommand(OrganizeMailboxAsync, () => !IsBusy);
+        CloseCommand = new RelayCommand(() => CloseRequested?.Invoke());
     }
+
+    public event Action? CloseRequested;
 
     public ObservableCollection<CategoryStat> Categories { get; } = [];
 
-    public ICommand SignInCommand { get; }
-    public ICommand SignOutCommand { get; }
-    public ICommand OrganizeCommand { get; }
+    public ICommand CloseCommand { get; }
 
     public bool IsBusy
     {
@@ -47,25 +43,30 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _isBusy, value))
             {
-                RefreshCommands();
+                OnPropertyChanged(nameof(CanClose));
             }
         }
     }
+
+    public bool IsDone
+    {
+        get => _isDone;
+        private set
+        {
+            if (SetProperty(ref _isDone, value))
+            {
+                OnPropertyChanged(nameof(CanClose));
+            }
+        }
+    }
+
+    public bool CanClose => !IsBusy;
 
     public bool IsSignedIn
     {
         get => _isSignedIn;
-        private set
-        {
-            if (SetProperty(ref _isSignedIn, value))
-            {
-                OnPropertyChanged(nameof(IsSignedOut));
-                RefreshCommands();
-            }
-        }
+        private set => SetProperty(ref _isSignedIn, value);
     }
-
-    public bool IsSignedOut => !IsSignedIn;
 
     public bool HasAnalysis
     {
@@ -74,30 +75,16 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _hasAnalysis, value))
             {
-                OnPropertyChanged(nameof(HasNoThemesYet));
                 OnPropertyChanged(nameof(SummaryText));
             }
         }
     }
 
-    public bool HasNoThemesYet => !HasAnalysis;
-
-    public bool IsSimulationMode
+    public string Headline
     {
-        get => _isSimulationMode;
-        set
-        {
-            if (SetProperty(ref _isSimulationMode, value))
-            {
-                OnPropertyChanged(nameof(SimulationBannerText));
-                OnPropertyChanged(nameof(OrganizeButtonText));
-            }
-        }
+        get => _headline;
+        private set => SetProperty(ref _headline, value);
     }
-
-    public string OrganizeButtonText => IsSimulationMode
-        ? "Aperçu de ma boîte"
-        : "Organiser ma boîte";
 
     public string StatusMessage
     {
@@ -109,12 +96,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _account;
         private set => SetProperty(ref _account, value);
-    }
-
-    public string DisplayName
-    {
-        get => _displayName;
-        private set => SetProperty(ref _displayName, value);
     }
 
     public int AnalyzedCount
@@ -154,161 +135,74 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     public string SummaryText => HasAnalysis
-        ? $"{AnalyzedCount:N0} messages lus — {Categories.Count} thématique(s) créée(s) — {ClassifiableCount:N0} classés, {UnclassifiedCount:N0} laissés tels quels"
-        : "Aucune thématique pour l’instant : elles naîtront de vos e-mails, pas d’une liste imposée.";
+        ? $"{AnalyzedCount:N0} messages lus — {Categories.Count(item => item.Name != "Non classés")} thématique(s) — {ClassifiableCount:N0} classés"
+        : "L’application crée les thématiques à partir de vos messages.";
 
-    public string SimulationBannerText => IsSimulationMode
-        ? "Aperçu seulement — l’application lit votre boîte et propose des thématiques, sans rien modifier."
-        : "Mode réel — un clic crée les thématiques dans Outlook et classe les messages correspondants.";
-
-    public async Task InitializeAsync()
+    public async Task RunAutomaticallyAsync()
     {
         if (!_options.HasValidClientId)
         {
-            StatusMessage = "L’administrateur doit d’abord enregistrer l’application dans Entra ID (docs/ENTRA-ID.md).";
-            return;
-        }
-
-        try
-        {
-            EnsureServices();
-            await _auth!.InitializeCacheAsync();
-            var silent = await _auth.TrySignInSilentlyAsync();
-            if (silent is null)
-            {
-                return;
-            }
-
-            await LoadProfileAsync();
-            StatusMessage = "Session Microsoft 365 restaurée. Cliquez sur Organiser ma boîte.";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = HumanizeError(ex);
-        }
-    }
-
-    private async Task SignInAsync()
-    {
-        if (!_options.HasValidClientId)
-        {
-            StatusMessage = "Le Client ID Entra ID n'est pas renseigné. Voir docs/ENTRA-ID.md.";
+            Headline = "Configuration manquante";
+            StatusMessage = "L’administrateur doit enregistrer l’application dans Entra ID avant de distribuer ce fichier.";
+            IsDone = true;
             return;
         }
 
         IsBusy = true;
-        StatusMessage = "Ouverture de la connexion Microsoft 365…";
-
-        try
-        {
-            EnsureServices();
-            await _auth!.InitializeCacheAsync();
-            await _auth.SignInAsync();
-            await LoadProfileAsync();
-            StatusMessage = "Connexion réussie. Cliquez sur Organiser ma boîte.";
-        }
-        catch (MsalClientException ex) when (ex.ErrorCode == "authentication_canceled")
-        {
-            StatusMessage = "Connexion annulée.";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = HumanizeError(ex);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task SignOutAsync()
-    {
-        IsBusy = true;
-        try
-        {
-            if (_auth is not null)
-            {
-                await _auth.SignOutAsync();
-            }
-
-            IsSignedIn = false;
-            HasAnalysis = false;
-            Account = "Non connecté";
-            DisplayName = string.Empty;
-            AnalyzedCount = 0;
-            ClassifiableCount = 0;
-            UnclassifiedCount = 0;
-            Categories.Clear();
-            StatusMessage = "Déconnecté. Cliquez sur Organiser ma boîte pour recommencer.";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = HumanizeError(ex);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task OrganizeMailboxAsync()
-    {
-        if (!_options.HasValidClientId)
-        {
-            StatusMessage = "Le Client ID Entra ID n'est pas renseigné. Voir docs/ENTRA-ID.md.";
-            return;
-        }
-
-        IsBusy = true;
+        IsDone = false;
         HasAnalysis = false;
         Categories.Clear();
+        Headline = "Organisation de votre boîte";
+        StatusMessage = "Connexion à Microsoft 365…";
 
         try
         {
             EnsureServices();
             await _auth!.InitializeCacheAsync();
 
-            if (!IsSignedIn)
-            {
-                StatusMessage = "Ouverture de la connexion Microsoft 365…";
-                await _auth.SignInAsync();
-                await LoadProfileAsync();
-            }
-
+            await _auth.SignInAsync();
+            await LoadProfileAsync();
             StatusMessage = "Lecture de votre boîte…";
+
             var progress = new Progress<string>(message => StatusMessage = message);
             var analysis = await _mail!.AnalyzeInboxAsync(progress);
             ShowAnalysis(analysis);
 
-            if (IsSimulationMode)
+            if (_options.Organizer.SimulationModeDefault)
             {
+                Headline = "Aperçu terminé";
                 StatusMessage = analysis.Themes.Count == 0
-                    ? "Aperçu terminé : pas assez de messages semblables pour créer une thématique."
-                    : $"Aperçu : {analysis.Themes.Count} thématique(s) seraient créées, {analysis.ClassifiableCount:N0} messages classés. Rien n’a été modifié.";
+                    ? "Pas assez de messages semblables pour créer une thématique. Rien n’a été modifié."
+                    : $"{analysis.Themes.Count} thématique(s) seraient créées. Rien n’a été modifié (mode aperçu).";
                 return;
             }
 
             if (analysis.Themes.Count == 0)
             {
+                Headline = "Terminé";
                 StatusMessage = "Pas assez de messages semblables pour créer une thématique. Rien n’a été modifié.";
                 return;
             }
 
             StatusMessage = "Création des thématiques dans Outlook…";
             var applied = await _mail.ApplyThemesAsync(analysis, progress);
-            StatusMessage = $"{analysis.Themes.Count} thématique(s) créées dans Outlook — {applied:N0} messages classés. Ouvrez Outlook pour les voir.";
+            Headline = "C’est terminé";
+            StatusMessage = $"{analysis.Themes.Count} thématique(s) créées — {applied:N0} messages classés. Vous pouvez ouvrir Outlook, puis fermer cette fenêtre.";
         }
         catch (MsalClientException ex) when (ex.ErrorCode == "authentication_canceled")
         {
-            StatusMessage = "Connexion annulée.";
+            Headline = "Connexion annulée";
+            StatusMessage = "Relancez l’application et connectez-vous avec votre compte Microsoft 365.";
         }
         catch (Exception ex)
         {
+            Headline = "Une erreur s’est produite";
             StatusMessage = HumanizeError(ex);
         }
         finally
         {
             IsBusy = false;
+            IsDone = true;
         }
     }
 
@@ -355,7 +249,6 @@ public sealed class MainViewModel : ViewModelBase
     private async Task LoadProfileAsync()
     {
         var profile = await _mail!.GetProfileAsync();
-        DisplayName = profile.DisplayName;
         Account = profile.Account;
         IsSignedIn = true;
     }
@@ -366,21 +259,14 @@ public sealed class MainViewModel : ViewModelBase
         _mail ??= new GraphMailService(_auth, _options);
     }
 
-    private void RefreshCommands()
-    {
-        (SignInCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-        (SignOutCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-        (OrganizeCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
-    }
-
     private static string HumanizeError(Exception ex) => ex switch
     {
         InvalidOperationException => ex.Message,
         MsalServiceException msal when msal.Message.Contains("AADSTS65001", StringComparison.OrdinalIgnoreCase) =>
-            "L'administrateur Microsoft 365 doit consentir aux permissions Graph (Mail.ReadWrite, MailboxSettings.ReadWrite).",
+            "L'administrateur Microsoft 365 doit consentir aux permissions Graph.",
         MsalServiceException msal when msal.Message.Contains("AADSTS700016", StringComparison.OrdinalIgnoreCase) =>
             "Le Client ID Entra ID est incorrect, ou l'application n'existe pas dans votre locataire.",
-        HttpRequestException => "Impossible de joindre Microsoft 365. Vérifiez le réseau et réessayez.",
+        HttpRequestException => "Impossible de joindre Microsoft 365. Vérifiez le réseau et relancez.",
         _ => $"Erreur : {ex.Message}"
     };
 }

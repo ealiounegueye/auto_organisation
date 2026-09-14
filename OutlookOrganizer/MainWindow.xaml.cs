@@ -11,11 +11,12 @@ public partial class MainWindow : Window
     {
         _viewModel = viewModel;
         DataContext = _viewModel;
+        _viewModel.CloseRequested += Close;
         InitializeComponent();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await _viewModel.InitializeAsync();
+        await _viewModel.RunAutomaticallyAsync();
     }
 }

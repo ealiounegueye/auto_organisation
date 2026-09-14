@@ -10,7 +10,7 @@
     <RootNamespace>OutlookOrganizer</RootNamespace>
     <AssemblyName>OutlookOrganizer</AssemblyName>
     <Product>Outlook Organizer</Product>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Outlook Organizer</Authors>
     <Description>Organisez automatiquement votre boîte Microsoft 365</Description>
     <ApplicationTitle>Outlook Organizer</ApplicationTitle>
@@ -28,11 +28,9 @@
   <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </None>
     <None Update="appsettings.local.json" Condition="Exists('appsettings.local.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
     </None>
   </ItemGroup>
 

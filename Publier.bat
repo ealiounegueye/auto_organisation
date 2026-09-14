@@ -6,15 +6,14 @@ cd /d "%~dp0"
 where dotnet >nul 2>&1
 if errorlevel 1 (
   echo.
-  echo Le SDK .NET 8 n'est pas installe sur CE PC ^(seulement le PC admin en a besoin^).
-  echo Telechargez-le ici : https://dotnet.microsoft.com/download/dotnet/8.0
-  echo Choisissez : SDK 8.0 pour Windows x64.
+  echo Installez le SDK .NET 8 sur CE PC admin seulement :
+  echo https://dotnet.microsoft.com/download/dotnet/8.0
   echo.
   pause
   exit /b 1
 )
 
-echo Publication de OutlookOrganizer.exe ^(un fichier, sans Visual Studio^)...
+echo Creation de l'application desktop OutlookOrganizer.exe ...
 dotnet publish "OutlookOrganizer\OutlookOrganizer.csproj" -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o "dist"
 if errorlevel 1 (
   echo.
@@ -24,11 +23,9 @@ if errorlevel 1 (
 )
 
 echo.
-echo Pret. Donnez aux collaborateurs le dossier dist :
+echo Envoyez UNIQUEMENT ce fichier aux collaborateurs :
 echo   %cd%\dist\OutlookOrganizer.exe
-echo   %cd%\dist\appsettings.json
 echo.
-echo Ils n'ont pas besoin de Visual Studio ni de .NET.
-echo Double-clic sur OutlookOrganizer.exe.
+echo Ils double-cliquent. L'application se connecte et organise la boite toute seule.
 echo.
 pause
